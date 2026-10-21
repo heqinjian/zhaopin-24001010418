@@ -1,10 +1,14 @@
 package com.recruitment.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.recruitment.common.Result;
-import com.recruitment.data.MockDataStore;
+import com.recruitment.mapper.ApplicationMapper;
+import com.recruitment.mapper.JobMapper;
+import com.recruitment.mapper.UserMapper;
 import com.recruitment.model.Application;
 import com.recruitment.model.Job;
 import com.recruitment.service.ApplicationService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -16,6 +20,15 @@ import java.util.Map;
 @Service
 public class ApplicationServiceImpl implements ApplicationService {
 
+    @Autowired
+    private ApplicationMapper applicationMapper;
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
+    private JobMapper jobMapper;
+
     @Override
     public Result<String> apply(Long userId, Long jobId) {
         // 第 1 步：两个 id 都不能为空
@@ -23,8 +36,8 @@ public class ApplicationServiceImpl implements ApplicationService {
             return Result.error("用户ID和职位ID不能为空");
         }
         // 第 2 步：用户、职位都要存在
-        Job job = MockDataStore.getJobById(jobId);
-        if (MockDataStore.getUserById(userId) == null || job == null) {
+        Job job = jobMapper.selectById(jobId);
+        if (userMapper.selectById(userId) == null || job == null) {
             return Result.error("用户或职位不存在");
         }
         // 第 3 步：查是否已有「同一 userId + jobId」的投递记录
@@ -37,21 +50,21 @@ public class ApplicationServiceImpl implements ApplicationService {
             existing.setStatus(Application.STATUS_APPLIED);
             existing.setApplyTime(LocalDateTime.now());
             existing.setCancelTime(null);
+            applicationMapper.updateById(existing);
             job.setApplyCount(job.getApplyCount() + 1);
-            MockDataStore.saveJob(job);
+            jobMapper.updateById(job);
             return Result.success("重新投递成功", null);
         }
-        // 第 4 步：全新投递 → 新建 Application 加入列表
+        // 第 4 步：全新投递 → 插入新记录
         Application application = new Application();
-        application.setId(MockDataStore.nextApplicationId());
         application.setUserId(userId);
         application.setJobId(jobId);
         application.setStatus(Application.STATUS_APPLIED);
         application.setApplyTime(LocalDateTime.now());
-        MockDataStore.getApplications().add(application);
+        applicationMapper.insert(application);
         // 第 5 步：职位投递次数 +1
         job.setApplyCount(job.getApplyCount() + 1);
-        MockDataStore.saveJob(job);
+        jobMapper.updateById(job);
         return Result.success("投递成功", null);
     }
 
@@ -66,14 +79,15 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (target == null) {
             return Result.error("未找到可取消的投递记录");
         }
-        // 第 3 步：改状态、写 cancelTime（不 remove，记录还在列表里）
+        // 第 3 步：改状态、写 cancelTime（不删除记录）
         target.setStatus(Application.STATUS_CANCELED);
         target.setCancelTime(LocalDateTime.now());
+        applicationMapper.updateById(target);
         // 第 4 步：职位 applyCount - 1，不低于 0
-        Job job = MockDataStore.getJobById(jobId);
+        Job job = jobMapper.selectById(jobId);
         if (job != null && job.getApplyCount() > 0) {
             job.setApplyCount(job.getApplyCount() - 1);
-            MockDataStore.saveJob(job);
+            jobMapper.updateById(job);
         }
         return Result.success("取消投递成功", null);
     }
@@ -85,16 +99,16 @@ public class ApplicationServiceImpl implements ApplicationService {
             return Result.error("用户ID不能为空");
         }
         // 第 2 步：用户必须存在
-        if (MockDataStore.getUserById(userId) == null) {
+        if (userMapper.selectById(userId) == null) {
             return Result.error("用户不存在");
         }
-        // 第 3 步：筛该用户的投递，拼 job 信息 + 状态 + 时间
+        // 第 3 步：查该用户的投递，拼 job 信息 + 状态 + 时间
+        LambdaQueryWrapper<Application> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Application::getUserId, userId);
+        List<Application> applications = applicationMapper.selectList(wrapper);
         List<Map<String, Object>> result = new ArrayList<>();
-        for (Application application : MockDataStore.getApplications()) {
-            if (!userId.equals(application.getUserId())) {
-                continue;
-            }
-            Job job = MockDataStore.getJobById(application.getJobId());
+        for (Application application : applications) {
+            Job job = jobMapper.selectById(application.getJobId());
             if (job == null) {
                 continue;
             }
@@ -112,13 +126,10 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     /** 按 userId + jobId 找投递记录（任意状态），没有则 null */
     private Application findApplication(Long userId, Long jobId) {
-        for (Application application : MockDataStore.getApplications()) {
-            if (userId.equals(application.getUserId())
-                    && jobId.equals(application.getJobId())) {
-                return application;
-            }
-        }
-        return null;
+        LambdaQueryWrapper<Application> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Application::getUserId, userId)
+                .eq(Application::getJobId, jobId);
+        return applicationMapper.selectOne(wrapper);
     }
 
     /** 找「已投递」状态的那一条，没有则 null */

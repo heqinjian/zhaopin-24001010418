@@ -1,9 +1,11 @@
 package com.recruitment.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.recruitment.common.Result;
-import com.recruitment.data.MockDataStore;
+import com.recruitment.mapper.UserMapper;
 import com.recruitment.model.User;
 import com.recruitment.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -11,58 +13,59 @@ import java.time.LocalDateTime;
 @Service
 public class UserServiceImpl implements UserService {
 
+    @Autowired
+    private UserMapper userMapper;
+
     @Override
     public Result<User> register(User request) {
-        // 第 1 步：校验参数——用户名、密码不能为空，为空就直接返回错误，不往下走
+        // 第 1 步：校验参数——用户名、密码不能为空
         if (request == null || isBlank(request.getUserName()) || isBlank(request.getPassWord())) {
             return Result.error("用户名和密码不能为空");
         }
-        // 第 2 步：查重——用户名已存在就不能再注册一个同名的
-        if (MockDataStore.getUserByUsername(request.getUserName()) != null) {
+        // 第 2 步：查重——按用户名查库
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(User::getUserName, request.getUserName());
+        if (userMapper.selectOne(wrapper) != null) {
             return Result.error("用户名已存在");
         }
-        // 第 3 步：真正「新建」一个用户对象，不能直接把 request 存进去
-        // （request 只是前端传来的原始数据，id、创建时间这些字段要由后端自己生成）
+        // 第 3 步：新建用户对象（id 由数据库自增，不手动设置）
         User user = new User();
-        // id 由仓库统一生成，不能让前端传
-        user.setId(MockDataStore.nextUserId());
         user.setUserName(request.getUserName());
         user.setPassWord(request.getPassWord());
         user.setNickName(request.getNickName());
         user.setEmail(request.getEmail());
         user.setPhone(request.getPhone());
-        // 创建时间以服务器时间为准
         user.setCreateTime(LocalDateTime.now());
-        // 第 4 步：存进内存仓库
-        MockDataStore.saveUser(user);
-        // 第 5 步：返回给前端之前，把密码去掉再返回（安全起见，密码不能明文回传）
+        // 第 4 步：插入数据库；insert 后自增 id 会回填到 user
+        userMapper.insert(user);
+        // 第 5 步：返回前脱敏，不回传密码
         return Result.success("注册成功", maskPassword(user));
     }
 
     @Override
     public Result<User> login(User request) {
-        // 第 1 步：同样先校验参数不能为空
+        // 第 1 步：校验参数
         if (request == null || isBlank(request.getUserName()) || isBlank(request.getPassWord())) {
             return Result.error("用户名和密码不能为空");
         }
-        // 第 2 步：按用户名去仓库里找这个人
-        User user = MockDataStore.getUserByUsername(request.getUserName());
-        // 第 3 步：人不存在 或者 密码不对，统一提示「用户名或密码错误」
-        // 故意不区分「用户不存在」和「密码错了」两种提示，避免被用来枚举出哪些用户名已注册
+        // 第 2 步：按用户名查库
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(User::getUserName, request.getUserName());
+        User user = userMapper.selectOne(wrapper);
+        // 第 3 步：人不存在或密码不对，统一提示「用户名或密码错误」
         if (user == null || !user.getPassWord().equals(request.getPassWord())) {
             return Result.error("用户名或密码错误");
         }
-        // 第 4 步：登录成功，同样去掉密码再返回
+        // 第 4 步：登录成功，脱敏返回
         return Result.success("登录成功", maskPassword(user));
     }
 
     @Override
     public Result<User> getUserInfo(Long userId) {
-        // 按 id 查；查不到直接返回业务错误
         if (userId == null) {
             return Result.error("用户ID不能为空");
         }
-        User user = MockDataStore.getUserById(userId);
+        User user = userMapper.selectById(userId);
         if (user == null) {
             return Result.error("用户不存在");
         }
@@ -70,9 +73,7 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
-     * 把 User 里的密码字段「隐藏」掉，返回一份新的、没有密码的对象。
-     * 注意：不是直接把 user.setPassWord(null) 改原对象，而是复制一份——
-     * 避免不小心把内存仓库里那份「真实数据」的密码也清空了。
+     * 复制一份不含密码的 User 对象返回，避免修改原对象。
      */
     private User maskPassword(User user) {
         User safe = new User();
@@ -82,11 +83,11 @@ public class UserServiceImpl implements UserService {
         safe.setEmail(user.getEmail());
         safe.setPhone(user.getPhone());
         safe.setCreateTime(user.getCreateTime());
-        // 故意不 set passWord，safe.passWord 保持 null
+        // 故意不 set passWord，保持 null
         return safe;
     }
 
-    /** 判断字符串是否「空」：null，或者去掉首尾空格后是空串，两种情况都算空 */
+    /** 判断字符串是否为空：null 或全为空白 */
     private boolean isBlank(String text) {
         return text == null || text.trim().isEmpty();
     }

@@ -1,9 +1,12 @@
 package com.recruitment.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.recruitment.common.Result;
-import com.recruitment.data.MockDataStore;
+import com.recruitment.mapper.ResumeMapper;
+import com.recruitment.mapper.UserMapper;
 import com.recruitment.model.Resume;
 import com.recruitment.service.ResumeService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -11,6 +14,12 @@ import java.util.List;
 
 @Service
 public class ResumeServiceImpl implements ResumeService {
+
+    @Autowired
+    private ResumeMapper resumeMapper;
+
+    @Autowired
+    private UserMapper userMapper;
 
     @Override
     public Result<Resume> create(Resume resume) {
@@ -21,55 +30,39 @@ public class ResumeServiceImpl implements ResumeService {
         if (isBlank(resume.getRealName())) {
             return Result.error("真实姓名不能为空");
         }
-        // 第 2 步：用户必须已在仓库里（不能给不存在的 userId 建简历）
-        if (MockDataStore.getUserById(resume.getUserId()) == null) {
+        // 第 2 步：用户必须存在
+        if (userMapper.selectById(resume.getUserId()) == null) {
             return Result.error("用户不存在");
         }
-        // 第 3 步：补全后端字段——新建一个对象，id 自增，创建/更新时间用服务器当前时间
-        Resume saved = new Resume();
-        saved.setId(MockDataStore.nextResumeId());
-        saved.setUserId(resume.getUserId());
-        saved.setRealName(resume.getRealName());
-        saved.setGender(resume.getGender());
-        saved.setAvatar(resume.getAvatar());
-        saved.setPhone(resume.getPhone());
-        saved.setEmail(resume.getEmail());
-        saved.setCity(resume.getCity());
-        saved.setEducation(resume.getEducation());
-        saved.setExperience(resume.getExperience());
-        saved.setExpectedSalary(resume.getExpectedSalary());
-        saved.setSkills(resume.getSkills());
-        saved.setIntroduction(resume.getIntroduction());
+        // 第 3 步：补全后端字段——id 由数据库自增，创建/更新时间用服务器时间
+        resume.setId(null);
         LocalDateTime now = LocalDateTime.now();
-        saved.setCreateTime(now);
-        saved.setUpdateTime(now);
-        // 第 4 步：写入内存仓库并返回成功
-        MockDataStore.saveResume(saved);
-        return Result.success("创建成功", saved);
+        resume.setCreateTime(now);
+        resume.setUpdateTime(now);
+        // 第 4 步：插入数据库
+        resumeMapper.insert(resume);
+        return Result.success("创建成功", resume);
     }
 
     @Override
     public Result<Resume> getById(Long id) {
-        // 第 1 步：校验 id
         if (id == null) {
             return Result.error("简历ID不能为空");
         }
-        // 第 2 步：按 id 查；查不到返回业务错误
-        Resume resume = MockDataStore.getResumeById(id);
+        Resume resume = resumeMapper.selectById(id);
         if (resume == null) {
             return Result.error("简历不存在");
         }
-        // 第 3 步：返回查到的简历
         return Result.success(resume);
     }
 
     @Override
     public Result<Resume> update(Long id, Resume resume) {
-        // 第 1 步：校验 id，并取出仓库里原来的那条记录
+        // 第 1 步：校验 id，并取出原记录
         if (id == null) {
             return Result.error("简历ID不能为空");
         }
-        Resume existing = MockDataStore.getResumeById(id);
+        Resume existing = resumeMapper.selectById(id);
         if (existing == null) {
             return Result.error("简历不存在");
         }
@@ -107,39 +100,35 @@ public class ResumeServiceImpl implements ResumeService {
         if (resume.getIntroduction() != null) {
             existing.setIntroduction(resume.getIntroduction());
         }
-        // 第 3 步：刷新更新时间，写回仓库
+        // 第 3 步：刷新更新时间，写回数据库
         existing.setUpdateTime(LocalDateTime.now());
-        MockDataStore.saveResume(existing);
+        resumeMapper.updateById(existing);
         return Result.success("更新成功", existing);
     }
 
     @Override
     public Result<String> delete(Long id) {
-        // 第 1 步：校验 id
         if (id == null) {
             return Result.error("简历ID不能为空");
         }
-        // 第 2 步：先查是否存在，不存在返回错误
-        if (MockDataStore.getResumeById(id) == null) {
+        if (resumeMapper.selectById(id) == null) {
             return Result.error("简历不存在");
         }
-        // 第 3 步：从仓库删除
-        MockDataStore.deleteResume(id);
+        resumeMapper.deleteById(id);
         return Result.success("删除成功", "删除成功");
     }
 
     @Override
     public Result<List<Resume>> listByUserId(Long userId) {
-        // 第 1 步：校验 userId
         if (userId == null) {
             return Result.error("用户ID不能为空");
         }
-        // 第 2 步：用户必须存在
-        if (MockDataStore.getUserById(userId) == null) {
+        if (userMapper.selectById(userId) == null) {
             return Result.error("用户不存在");
         }
-        // 第 3 步：查该用户下的全部简历并返回
-        return Result.success(MockDataStore.getResumesByUserId(userId));
+        LambdaQueryWrapper<Resume> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Resume::getUserId, userId);
+        return Result.success(resumeMapper.selectList(wrapper));
     }
 
     private boolean isBlank(String text) {

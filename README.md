@@ -1,11 +1,13 @@
 # 招聘系统（Recruitment System）
 
-基于 Spring Boot 的招聘网站后端，提供职位浏览、用户注册登录、简历管理、职位收藏与投递等接口。使用内存仓库（MockDataStore）存储数据，无需数据库即可运行。
+基于 Spring Boot + MyBatis Plus 的招聘网站后端，提供职位浏览、用户注册登录、简历管理、职位收藏与投递等接口。数据持久化到 MySQL，通过 MyBatis Plus 的 BaseMapper 完成 CRUD。
 
 ## 技术栈
 
 - Java 17
 - Spring Boot 3.2.2（spring-boot-starter-web）
+- MyBatis Plus 3.5.5（mybatis-plus-spring-boot3-starter）
+- MySQL 8.x / 9.x（mysql-connector-j）
 - Maven 3.9+
 - Lombok
 
@@ -16,23 +18,29 @@
 ├── 第02步-数据绑定与接口实现(下).postman_collection.json   # 接口测试集合（Postman 导入）
 └── recruitment-system/                                     # Maven 工程
     ├── pom.xml
-    └── src/main/java/com/recruitment/
-        ├── common/          # 统一响应 Result
-        ├── controller/      # 控制层（职位/用户/简历/收藏/投递）
-        ├── service/         # 业务接口
-        │   └── impl/        # 业务实现
-        ├── model/           # 实体类
-        └── data/            # MockDataStore 内存仓库 + 预置数据
+    └── src/main/
+        ├── java/com/recruitment/
+        │   ├── common/          # 统一响应 Result
+        │   ├── config/          # MyBatisPlusConfig（分页拦截器）
+        │   ├── controller/      # 控制层（职位/用户/简历/收藏/投递）
+        │   ├── service/         # 业务接口
+        │   │   └── impl/        # 业务实现（基于 Mapper）
+        │   ├── mapper/          # 5 个 Mapper（extends BaseMapper）
+        │   └── model/           # 实体类（@TableName/@TableId）
+        └── resources/
+            ├── application.yml
+            └── db/init.sql      # 建库建表 + 预置数据
 ```
 
 ## 快速开始
 
+1. 先准备数据库：启动 MySQL，执行 `src/main/resources/db/init.sql`（自动创建 `recruitment_db` 及全部表、预置数据）
+2. 按需修改 `application.yml` 中的数据源用户名/密码
+3. 启动工程：
+
 ```bash
 cd recruitment-system
-# 方式一：Maven
 mvn spring-boot:run
-# 方式二：Maven Wrapper
-./mvnw spring-boot-run
 ```
 
 启动后访问基础地址：`http://localhost:8080/api`
