@@ -1,15 +1,18 @@
 package com.recruitment.service;
 
 import com.recruitment.common.Result;
-import com.recruitment.model.Application;
 
 import java.util.List;
+import java.util.Map;
 
 public interface ApplicationService {
 
-    Result<List<Application>> list(Long userId);
+    // 投递职位：传入 userId、jobId；已投过 / 再投 / 新投由实现类区分提示
+    Result<String> apply(Long userId, Long jobId);
 
-    Result<Application> apply(Application application);
+    // 取消投递：同一对用户 id + 职位 id；只改状态，不删记录
+    Result<String> cancel(Long userId, Long jobId);
 
-    Result<Void> cancel(Long userId, Long jobId);
+    // 某用户的投递列表（Map：jobId、jobTitle、companyName、status、applyTime、cancelTime）
+    Result<List<Map<String, Object>>> listByUser(Long userId);
 }

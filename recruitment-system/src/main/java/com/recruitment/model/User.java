@@ -8,9 +8,9 @@ import java.time.LocalDateTime;
 public class User {
 
     private Long id;
-    private String username;
-    private String password;
-    private String nickname;
+    private String userName;
+    private String passWord;
+    private String nickName;
     private String email;
     private String phone;
     private LocalDateTime createTime;

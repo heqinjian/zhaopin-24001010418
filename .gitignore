@@ -1,0 +1,19 @@
+# Maven / 构建产物
+target/
+build/
+!.mvn/wrapper/maven-wrapper.jar
+.mvn-repository/
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.classpath
+.project
+
+# 系统/日志
+.DS_Store
+*.log

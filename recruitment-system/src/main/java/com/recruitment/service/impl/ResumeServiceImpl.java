@@ -13,59 +13,136 @@ import java.util.List;
 public class ResumeServiceImpl implements ResumeService {
 
     @Override
-    public Result<List<Resume>> list(Long userId) {
-        if (userId == null) {
-            return Result.error("userId 不能为空");
+    public Result<Resume> create(Resume resume) {
+        // 第 1 步：校验——用户 id、真实姓名不能为空
+        if (resume == null || resume.getUserId() == null) {
+            return Result.error("用户ID不能为空");
         }
-        return Result.success(MockDataStore.getResumesByUserId(userId));
+        if (isBlank(resume.getRealName())) {
+            return Result.error("真实姓名不能为空");
+        }
+        // 第 2 步：用户必须已在仓库里（不能给不存在的 userId 建简历）
+        if (MockDataStore.getUserById(resume.getUserId()) == null) {
+            return Result.error("用户不存在");
+        }
+        // 第 3 步：补全后端字段——新建一个对象，id 自增，创建/更新时间用服务器当前时间
+        Resume saved = new Resume();
+        saved.setId(MockDataStore.nextResumeId());
+        saved.setUserId(resume.getUserId());
+        saved.setRealName(resume.getRealName());
+        saved.setGender(resume.getGender());
+        saved.setAvatar(resume.getAvatar());
+        saved.setPhone(resume.getPhone());
+        saved.setEmail(resume.getEmail());
+        saved.setCity(resume.getCity());
+        saved.setEducation(resume.getEducation());
+        saved.setExperience(resume.getExperience());
+        saved.setExpectedSalary(resume.getExpectedSalary());
+        saved.setSkills(resume.getSkills());
+        saved.setIntroduction(resume.getIntroduction());
+        LocalDateTime now = LocalDateTime.now();
+        saved.setCreateTime(now);
+        saved.setUpdateTime(now);
+        // 第 4 步：写入内存仓库并返回成功
+        MockDataStore.saveResume(saved);
+        return Result.success("创建成功", saved);
     }
 
     @Override
-    public Result<Resume> detail(Long id) {
+    public Result<Resume> getById(Long id) {
+        // 第 1 步：校验 id
+        if (id == null) {
+            return Result.error("简历ID不能为空");
+        }
+        // 第 2 步：按 id 查；查不到返回业务错误
         Resume resume = MockDataStore.getResumeById(id);
         if (resume == null) {
             return Result.error("简历不存在");
         }
+        // 第 3 步：返回查到的简历
         return Result.success(resume);
     }
 
     @Override
-    public Result<Resume> create(Resume resume) {
-        if (resume == null || resume.getUserId() == null) {
-            return Result.error("userId 不能为空");
+    public Result<Resume> update(Long id, Resume resume) {
+        // 第 1 步：校验 id，并取出仓库里原来的那条记录
+        if (id == null) {
+            return Result.error("简历ID不能为空");
         }
-        if (MockDataStore.getUserById(resume.getUserId()) == null) {
+        Resume existing = MockDataStore.getResumeById(id);
+        if (existing == null) {
+            return Result.error("简历不存在");
+        }
+        // 第 2 步：部分更新——请求体里非 null 的字段才覆盖；不改 id、userId、createTime
+        if (resume.getRealName() != null) {
+            existing.setRealName(resume.getRealName());
+        }
+        if (resume.getGender() != null) {
+            existing.setGender(resume.getGender());
+        }
+        if (resume.getAvatar() != null) {
+            existing.setAvatar(resume.getAvatar());
+        }
+        if (resume.getPhone() != null) {
+            existing.setPhone(resume.getPhone());
+        }
+        if (resume.getEmail() != null) {
+            existing.setEmail(resume.getEmail());
+        }
+        if (resume.getCity() != null) {
+            existing.setCity(resume.getCity());
+        }
+        if (resume.getEducation() != null) {
+            existing.setEducation(resume.getEducation());
+        }
+        if (resume.getExperience() != null) {
+            existing.setExperience(resume.getExperience());
+        }
+        if (resume.getExpectedSalary() != null) {
+            existing.setExpectedSalary(resume.getExpectedSalary());
+        }
+        if (resume.getSkills() != null) {
+            existing.setSkills(resume.getSkills());
+        }
+        if (resume.getIntroduction() != null) {
+            existing.setIntroduction(resume.getIntroduction());
+        }
+        // 第 3 步：刷新更新时间，写回仓库
+        existing.setUpdateTime(LocalDateTime.now());
+        MockDataStore.saveResume(existing);
+        return Result.success("更新成功", existing);
+    }
+
+    @Override
+    public Result<String> delete(Long id) {
+        // 第 1 步：校验 id
+        if (id == null) {
+            return Result.error("简历ID不能为空");
+        }
+        // 第 2 步：先查是否存在，不存在返回错误
+        if (MockDataStore.getResumeById(id) == null) {
+            return Result.error("简历不存在");
+        }
+        // 第 3 步：从仓库删除
+        MockDataStore.deleteResume(id);
+        return Result.success("删除成功", "删除成功");
+    }
+
+    @Override
+    public Result<List<Resume>> listByUserId(Long userId) {
+        // 第 1 步：校验 userId
+        if (userId == null) {
+            return Result.error("用户ID不能为空");
+        }
+        // 第 2 步：用户必须存在
+        if (MockDataStore.getUserById(userId) == null) {
             return Result.error("用户不存在");
         }
-        resume.setId(MockDataStore.nextResumeId());
-        LocalDateTime now = LocalDateTime.now();
-        resume.setCreateTime(now);
-        resume.setUpdateTime(now);
-        MockDataStore.saveResume(resume);
-        return Result.success("创建成功", resume);
+        // 第 3 步：查该用户下的全部简历并返回
+        return Result.success(MockDataStore.getResumesByUserId(userId));
     }
 
-    @Override
-    public Result<Resume> update(Long id, Resume resume) {
-        Resume exist = MockDataStore.getResumeById(id);
-        if (exist == null) {
-            return Result.error("简历不存在");
-        }
-        resume.setId(id);
-        resume.setUserId(exist.getUserId());
-        resume.setCreateTime(exist.getCreateTime());
-        resume.setUpdateTime(LocalDateTime.now());
-        MockDataStore.saveResume(resume);
-        return Result.success("更新成功", resume);
-    }
-
-    @Override
-    public Result<Void> delete(Long id) {
-        Resume exist = MockDataStore.getResumeById(id);
-        if (exist == null) {
-            return Result.error("简历不存在");
-        }
-        MockDataStore.deleteResume(id);
-        return Result.success("删除成功", null);
+    private boolean isBlank(String text) {
+        return text == null || text.trim().isEmpty();
     }
 }
