@@ -1,0 +1,68 @@
+{
+  "info": {
+    "_postman_id": "recruitment-step05-collection",
+    "name": "第05步-文件上传",
+    "description": "招聘网站第05步文件上传。先启动 RecruitmentApplication，再 Import 本文件。\n\n变量 baseUrl 默认 http://localhost:8080/api\n\nPOST /files/upload 和 /uploads/** 已排除登录拦截，不用 Token。\nBody 选 form-data，字段名必须是 file，类型选 File，再选本地图片。不要手写 Content-Type。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api"
+    }
+  ],
+  "item": [
+    {
+      "name": "5.1 上传图片",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": [],
+              "description": "选一张 jpg、jpeg、png 或 gif"
+            }
+          ]
+        },
+        "url": "{{baseUrl}}/files/upload",
+        "description": "成功：code=200，message=上传成功。data.url 形如 /uploads/xxxx.jpg，data.filename 是磁盘上的新文件名。到 D:/work/uploads/ 能看到同名文件。"
+      },
+      "response": []
+    },
+    {
+      "name": "5.1 上传 txt（预期仅支持图片）",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": [],
+              "description": "选一个 .txt，用来看格式校验"
+            }
+          ]
+        },
+        "url": "{{baseUrl}}/files/upload",
+        "description": "预期 message：仅支持jpg、jpeg、png、gif格式的图片。磁盘里不应出现这个 txt。"
+      },
+      "response": []
+    },
+    {
+      "name": "5.2 打开刚上传的图片",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/uploads/把filename换成上传返回的文件名.jpg",
+        "description": "把路径里的文件名换成上传接口返回的 data.filename。状态码 200，响应是图片。同一地址也可以贴到浏览器地址栏查看。"
+      },
+      "response": []
+    }
+  ]
+}

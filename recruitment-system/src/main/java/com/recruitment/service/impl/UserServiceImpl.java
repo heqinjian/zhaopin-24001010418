@@ -5,6 +5,8 @@ import com.recruitment.common.Result;
 import com.recruitment.mapper.UserMapper;
 import com.recruitment.model.User;
 import com.recruitment.service.UserService;
+import com.recruitment.util.JwtUtil;
+import com.recruitment.vo.LoginVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +17,9 @@ public class UserServiceImpl implements UserService {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     @Override
     public Result<User> register(User request) {
@@ -43,7 +48,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public Result<User> login(User request) {
+    public Result<LoginVO> login(User request) {
         // 第 1 步：校验参数
         if (request == null || isBlank(request.getUserName()) || isBlank(request.getPassWord())) {
             return Result.error("用户名和密码不能为空");
@@ -56,8 +61,11 @@ public class UserServiceImpl implements UserService {
         if (user == null || !user.getPassWord().equals(request.getPassWord())) {
             return Result.error("用户名或密码错误");
         }
-        // 第 4 步：登录成功，脱敏返回
-        return Result.success("登录成功", maskPassword(user));
+        // 第 4 步：登录成功，生成 token，返回 token 与脱敏用户
+        User safeUser = maskPassword(user);
+        String token = jwtUtil.generateToken(user.getId());
+        LoginVO loginVO = new LoginVO(token, safeUser);
+        return Result.success("登录成功", loginVO);
     }
 
     @Override

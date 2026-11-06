@@ -17,6 +17,21 @@ spring:
     url: jdbc:mysql://localhost:3306/recruitment_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: root
     password: ROOT
+  # 文件上传
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 5MB
+      max-request-size: 10MB
+
+# 自定义配置：文件上传目录
+file:
+  upload-path: D:/work/uploads/
+
+# JWT 配置
+jwt:
+  secret: recruitment-website-jwt-secret-key-2024-web-architecture-course
+  expiration: 604800000
 
 # MyBatis Plus
 mybatis-plus:
