@@ -5,7 +5,9 @@ import com.recruitment.common.Result;
 import com.recruitment.mapper.ResumeMapper;
 import com.recruitment.mapper.UserMapper;
 import com.recruitment.model.Resume;
+import com.recruitment.model.User;
 import com.recruitment.service.ResumeService;
+import com.recruitment.util.RedisUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +22,12 @@ public class ResumeServiceImpl implements ResumeService {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private RedisUtil redisUtil;
+
+    // 缓存保留 3 分钟，单位为秒
+    private static final long RESUME_CACHE_SECONDS = 3 * 60;
 
     @Override
     public Result<Resume> create(Resume resume) {
@@ -41,18 +49,33 @@ public class ResumeServiceImpl implements ResumeService {
         resume.setUpdateTime(now);
         // 第 4 步：插入数据库
         resumeMapper.insert(resume);
+        // 第 5 步：插入成功后删除该用户的简历列表缓存（新简历还没有详情缓存）
+        redisUtil.delete("resume:list:" + resume.getUserId());
         return Result.success("创建成功", resume);
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public Result<Resume> getById(Long id) {
         if (id == null) {
             return Result.error("简历ID不能为空");
         }
+        String cacheKey = "resume:detail:" + id;
+        // 第 1 步：先查 Redis
+        Object cached = redisUtil.get(cacheKey);
+        if (cached != null) {
+            System.out.println("命中Redis缓存：" + cacheKey);
+            return Result.success((Resume) cached);
+        }
+        System.out.println("Redis缓存未命中，查询MySQL：" + cacheKey);
+        // 第 2 步：未命中，查 MySQL
         Resume resume = resumeMapper.selectById(id);
         if (resume == null) {
+            // 简历不存在时不写入缓存
             return Result.error("简历不存在");
         }
+        // 第 3 步：查到后写入缓存，3 分钟后过期
+        redisUtil.set(cacheKey, resume, RESUME_CACHE_SECONDS);
         return Result.success(resume);
     }
 
@@ -103,6 +126,9 @@ public class ResumeServiceImpl implements ResumeService {
         // 第 3 步：刷新更新时间，写回数据库
         existing.setUpdateTime(LocalDateTime.now());
         resumeMapper.updateById(existing);
+        // 第 4 步：更新成功后删除详情缓存和该用户的列表缓存
+        redisUtil.delete("resume:detail:" + id);
+        redisUtil.delete("resume:list:" + existing.getUserId());
         return Result.success("更新成功", existing);
     }
 
@@ -111,24 +137,42 @@ public class ResumeServiceImpl implements ResumeService {
         if (id == null) {
             return Result.error("简历ID不能为空");
         }
-        if (resumeMapper.selectById(id) == null) {
+        Resume resume = resumeMapper.selectById(id);
+        if (resume == null) {
             return Result.error("简历不存在");
         }
         resumeMapper.deleteById(id);
+        // 删除成功后删除详情缓存和该用户的列表缓存
+        redisUtil.delete("resume:detail:" + id);
+        redisUtil.delete("resume:list:" + resume.getUserId());
         return Result.success("删除成功", "删除成功");
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public Result<List<Resume>> listByUserId(Long userId) {
         if (userId == null) {
             return Result.error("用户ID不能为空");
         }
-        if (userMapper.selectById(userId) == null) {
+        String cacheKey = "resume:list:" + userId;
+        // 第 1 步：先查 Redis，命中就直接返回，不再查 user 表
+        Object cached = redisUtil.get(cacheKey);
+        if (cached != null) {
+            System.out.println("命中Redis缓存：" + cacheKey);
+            return Result.success((List<Resume>) cached);
+        }
+        System.out.println("Redis缓存未命中，查询MySQL：" + cacheKey);
+        // 第 2 步：未命中，查 MySQL
+        User user = userMapper.selectById(userId);
+        if (user == null) {
             return Result.error("用户不存在");
         }
         LambdaQueryWrapper<Resume> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Resume::getUserId, userId);
-        return Result.success(resumeMapper.selectList(wrapper));
+        List<Resume> resumes = resumeMapper.selectList(wrapper);
+        // 第 3 步：写入缓存，3 分钟后过期。空列表也写入
+        redisUtil.set(cacheKey, resumes, RESUME_CACHE_SECONDS);
+        return Result.success(resumes);
     }
 
     private boolean isBlank(String text) {

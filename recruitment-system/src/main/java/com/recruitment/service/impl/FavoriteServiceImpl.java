@@ -8,6 +8,7 @@ import com.recruitment.mapper.UserMapper;
 import com.recruitment.model.Favorite;
 import com.recruitment.model.Job;
 import com.recruitment.service.FavoriteService;
+import com.recruitment.util.RedisUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,12 @@ public class FavoriteServiceImpl implements FavoriteService {
 
     @Autowired
     private JobMapper jobMapper;
+
+    @Autowired
+    private RedisUtil redisUtil;
+
+    // 缓存保留 3 分钟，单位为秒
+    private static final long FAVORITE_CACHE_SECONDS = 3 * 60;
 
     @Override
     public Result<String> add(Long userId, Long jobId) {
@@ -47,6 +54,8 @@ public class FavoriteServiceImpl implements FavoriteService {
         favorite.setJobId(jobId);
         favorite.setCreateTime(LocalDateTime.now());
         favoriteMapper.insert(favorite);
+        // 第 5 步：收藏成功后删除该用户的收藏列表缓存（数据库没成功时不删）
+        redisUtil.delete("favorite:list:" + userId);
         return Result.success("收藏成功", null);
     }
 
@@ -63,20 +72,31 @@ public class FavoriteServiceImpl implements FavoriteService {
         }
         // 第 3 步：物理删除
         favoriteMapper.deleteById(favorite.getId());
+        // 第 4 步：取消成功后删除该用户的收藏列表缓存
+        redisUtil.delete("favorite:list:" + userId);
         return Result.success("取消收藏成功", null);
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public Result<List<Job>> listByUser(Long userId) {
         // 第 1 步：校验 userId
         if (userId == null) {
             return Result.error("用户ID不能为空");
         }
-        // 第 2 步：用户必须存在
+        String cacheKey = "favorite:list:" + userId;
+        // 第 2 步：先查 Redis，命中就直接返回
+        Object cached = redisUtil.get(cacheKey);
+        if (cached != null) {
+            System.out.println("命中Redis缓存：" + cacheKey);
+            return Result.success((List<Job>) cached);
+        }
+        System.out.println("Redis缓存未命中，查询MySQL：" + cacheKey);
+        // 第 3 步：未命中，用户必须存在
         if (userMapper.selectById(userId) == null) {
             return Result.error("用户不存在");
         }
-        // 第 3 步：查该用户的收藏记录，逐条按 jobId 查职位，组装成 Job 列表
+        // 第 4 步：查该用户的收藏记录，逐条按 jobId 查职位，组装成 Job 列表
         LambdaQueryWrapper<Favorite> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Favorite::getUserId, userId);
         List<Favorite> favorites = favoriteMapper.selectList(wrapper);
@@ -87,6 +107,8 @@ public class FavoriteServiceImpl implements FavoriteService {
                 jobs.add(job);
             }
         }
+        // 第 5 步：写入缓存，3 分钟后过期
+        redisUtil.set(cacheKey, jobs, FAVORITE_CACHE_SECONDS);
         return Result.success(jobs);
     }
 

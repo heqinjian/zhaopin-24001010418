@@ -1,6 +1,6 @@
 # 招聘系统（Recruitment System）
 
-基于 Spring Boot + MyBatis Plus 的招聘网站后端，提供职位浏览、用户注册登录、简历管理、职位收藏与投递、图片上传等接口。数据持久化到 MySQL，通过 MyBatis Plus 的 BaseMapper 完成 CRUD；集成 SpringDoc 自动生成在线接口文档，并使用 JWT 实现登录认证。
+基于 Spring Boot + MyBatis Plus 的招聘网站后端，提供职位浏览、用户注册登录、简历管理、职位收藏与投递、图片上传等接口。数据持久化到 MySQL，通过 MyBatis Plus 的 BaseMapper 完成 CRUD；集成 SpringDoc 自动生成在线接口文档，使用 JWT 实现登录认证，并用 Redis 做列表/详情查询缓存。
 
 ## 技术栈
 
@@ -8,6 +8,7 @@
 - Spring Boot 3.2.2（spring-boot-starter-web）
 - MyBatis Plus 3.5.5（mybatis-plus-spring-boot3-starter）
 - MySQL 8.x / 9.x（mysql-connector-j）
+- Spring Data Redis（spring-boot-starter-data-redis）
 - SpringDoc OpenAPI 2.3.0（接口文档 + Swagger UI）
 - JJWT 0.12.3（JWT 生成与校验）
 - Maven 3.9+
@@ -24,15 +25,15 @@
     └── src/main/
         ├── java/com/recruitment/
         │   ├── common/          # 统一响应 Result
-        │   ├── config/          # MyBatisPlusConfig、SwaggerConfig、FileUploadConfig、WebMvcConfig
+        │   ├── config/          # MyBatisPlusConfig、SwaggerConfig、FileUploadConfig、WebMvcConfig、RedisConfig
         │   ├── context/         # UserContext（ThreadLocal 保存当前用户ID）
         │   ├── interceptor/     # JwtInterceptor（登录拦截）
         │   ├── controller/      # 控制层（职位/用户/简历/收藏/投递/文件）
         │   ├── service/         # 业务接口
-        │   │   └── impl/        # 业务实现（基于 Mapper）
+        │   │   └── impl/        # 业务实现（基于 Mapper + Redis 缓存）
         │   ├── mapper/          # 5 个 Mapper（extends BaseMapper）
         │   ├── model/           # 实体类（@TableName/@TableId/@Schema）
-        │   ├── util/            # JwtUtil
+        │   ├── util/            # JwtUtil、RedisUtil
         │   └── vo/              # LoginVO（token + user）
         └── resources/
             ├── application.yml
@@ -42,8 +43,9 @@
 ## 快速开始
 
 1. 先准备数据库：启动 MySQL，执行 `src/main/resources/db/init.sql`（自动创建 `recruitment_db` 及全部表、预置数据）
-2. 按需修改 `application.yml` 中的数据源用户名/密码，以及 `file.upload-path` 文件上传目录
-3. 启动工程：
+2. 启动 Redis（默认 `localhost:6379`，无密码；本机可执行 `D:\redis\redis-server.exe D:\redis\redis.windows.conf`，并用 `redis-cli ping` 确认返回 `PONG`）
+3. 按需修改 `application.yml` 中的数据源用户名/密码、`file.upload-path` 文件上传目录，以及 `spring.data.redis` 连接信息
+4. 启动工程：
 
 ```bash
 cd recruitment-system
@@ -107,6 +109,20 @@ Authorization: Bearer <token>
 - 仅支持 `jpg`、`jpeg`、`png`、`gif` 格式，其他格式返回错误提示
 - 文件使用去横线的 UUID 重命名，避免重名
 - 单文件大小上限 5MB，单次请求上限 10MB
+
+## Redis 缓存说明
+
+采用 Cache Aside（旁路缓存）模式：先查 Redis，命中直接返回；未命中再查 MySQL 并写回缓存，缓存 3 分钟（180 秒）过期。
+
+| 缓存 Key | 内容 | 写入时机 | 删除时机 |
+| --- | --- | --- | --- |
+| `resume:list:{userId}` | 某用户简历列表 JSON | `listByUserId` 未命中后 | 创建/更新/删除简历成功后 |
+| `resume:detail:{id}` | 单条简历 JSON | `getById` 未命中且记录存在时 | 更新/删除简历成功后 |
+| `favorite:list:{userId}` | 某用户收藏的职位列表 JSON | `listByUser` 未命中后 | 收藏/取消收藏成功后 |
+
+- 序列化：Key 用 `StringRedisSerializer`（可读文本），Value 用 `GenericJackson2JsonRedisSerializer`（JSON，并保存类型信息，支持 `List<Job>` 等还原）
+- `Job` 因带 `@Builder` 会丢失无参构造方法，已补 `@NoArgsConstructor`、`@AllArgsConstructor`，否则从 Redis 还原 JSON 会失败
+- 控制台会打印 `命中Redis缓存：<key>` / `Redis缓存未命中，查询MySQL：<key>`，便于对照 SQL 日志确认缓存生效
 
 ## 预置数据
 

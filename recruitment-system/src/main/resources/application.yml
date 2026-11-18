@@ -23,6 +23,14 @@ spring:
       enabled: true
       max-file-size: 5MB
       max-request-size: 10MB
+  # 第07步新增：Redis 连接配置
+  data:
+    redis:
+      host: localhost      # Redis 所在主机
+      port: 6379           # Redis 端口
+      database: 0          # 使用 0 号数据库
+      timeout: 3000ms      # 连接超时时间
+      # password: 123456   # Redis 有密码时取消注释并修改
 
 # 自定义配置：文件上传目录
 file:

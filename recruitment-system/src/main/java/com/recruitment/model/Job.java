@@ -4,11 +4,17 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
 @Builder
+// ↓ 第07步新增：Jackson 还原 Redis 中的 JSON 时需要无参构造方法
+@NoArgsConstructor
+@AllArgsConstructor
+// ↑ 第07步新增结束
 @TableName("job")
 @Schema(description = "职位信息")
 public class Job {

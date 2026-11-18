@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class SwaggerConfig {
 
-    private static final String SECURITY_SCHEME_NAME = "Bearer JWT";
+    private static final String SECURITY_SCHEME_NAME = "Bearer Token";
 
     @Bean
     public OpenAPI openAPI() {
@@ -29,10 +29,11 @@ public class SwaggerConfig {
                 .components(new Components()
                         .addSecuritySchemes(SECURITY_SCHEME_NAME,
                                 new SecurityScheme()
-                                        .name(SECURITY_SCHEME_NAME)
+                                        .name("Authorization")
                                         .type(SecurityScheme.Type.HTTP)
                                         .scheme("bearer")
                                         .bearerFormat("JWT")
-                                        .in(SecurityScheme.In.HEADER)));
+                                        .in(SecurityScheme.In.HEADER)
+                                        .description("粘贴登录返回的 Token，不要手写 Bearer 前缀")));
     }
 }
