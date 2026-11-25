@@ -6,6 +6,7 @@ import com.recruitment.service.ResumeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,7 +30,7 @@ public class ResumeController {
 
     @Operation(summary = "创建简历", description = "新建简历，userId、realName 必填")
     @PostMapping
-    public Result<Resume> create(@RequestBody Resume resume) {
+    public Result<Resume> create(@Valid @RequestBody Resume resume) {
         return resumeService.create(resume);
     }
 

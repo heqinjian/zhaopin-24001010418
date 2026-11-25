@@ -1,6 +1,6 @@
 # 招聘系统（Recruitment System）
 
-基于 Spring Boot + MyBatis Plus 的招聘网站后端，提供职位浏览、用户注册登录、简历管理、职位收藏与投递、图片上传等接口。数据持久化到 MySQL，通过 MyBatis Plus 的 BaseMapper 完成 CRUD；集成 SpringDoc 自动生成在线接口文档，使用 JWT 实现登录认证，并用 Redis 做列表/详情查询缓存。
+基于 Spring Boot + MyBatis Plus 的招聘网站后端，提供职位浏览、用户注册登录、简历管理、职位收藏与投递、图片上传等接口。数据持久化到 MySQL，通过 MyBatis Plus 的 BaseMapper 完成 CRUD；集成 SpringDoc 自动生成在线接口文档，使用 JWT 实现登录认证，用 Redis 做列表/详情查询缓存，并用 Bean Validation + 全局异常处理器统一校验参数与错误响应。
 
 ## 技术栈
 
@@ -9,6 +9,7 @@
 - MyBatis Plus 3.5.5（mybatis-plus-spring-boot3-starter）
 - MySQL 8.x / 9.x（mysql-connector-j）
 - Spring Data Redis（spring-boot-starter-data-redis）
+- Bean Validation（spring-boot-starter-validation）
 - SpringDoc OpenAPI 2.3.0（接口文档 + Swagger UI）
 - JJWT 0.12.3（JWT 生成与校验）
 - Maven 3.9+
@@ -29,6 +30,7 @@
         │   ├── context/         # UserContext（ThreadLocal 保存当前用户ID）
         │   ├── interceptor/     # JwtInterceptor（登录拦截）
         │   ├── controller/      # 控制层（职位/用户/简历/收藏/投递/文件）
+        │   ├── exception/       # GlobalExceptionHandler（校验异常统一返回 Result）
         │   ├── service/         # 业务接口
         │   │   └── impl/        # 业务实现（基于 Mapper + Redis 缓存）
         │   ├── mapper/          # 5 个 Mapper（extends BaseMapper）
@@ -109,6 +111,34 @@ Authorization: Bearer <token>
 - 仅支持 `jpg`、`jpeg`、`png`、`gif` 格式，其他格式返回错误提示
 - 文件使用去横线的 UUID 重命名，避免重名
 - 单文件大小上限 5MB，单次请求上限 10MB
+
+## 参数校验与异常处理
+
+校验注解写在实体字段上，Controller 参数前加 `@Valid` 才会在请求进入方法体之前执行：
+
+| 接口 | 校验字段 | 规则 |
+| --- | --- | --- |
+| `POST /users/register` | `userName` | `@NotBlank` + `@Size(3,20)` |
+| | `passWord` | `@NotBlank` + `@Size(6,20)` |
+| | `email` | `@Email`（为 null 时不校验） |
+| | `phone` | `@Pattern(^1[3-9]\\d{9}$)`（为 null 时不校验） |
+| `POST /resumes` | `userId` | `@NotNull` |
+| | `realName` | `@NotBlank` |
+
+`@Valid` 不通过时抛出 `MethodArgumentNotValidException`，由 `exception/GlobalExceptionHandler` 接住，把所有字段错误拼成 `字段名: 提示; 字段名: 提示`，用 `Result.error` 返回（`code=500`，HTTP 200）：
+
+```json
+{
+  "code": 500,
+  "message": "userName: 用户名长度必须在3-20之间; passWord: 密码长度必须在6-20之间; email: 邮箱格式不正确",
+  "data": null
+}
+```
+
+- 校验失败发生在 Controller 之前，Service 不会执行，因此数据库不会有 INSERT
+- `PUT /resumes/{id}` 是部分更新，**不加** `@Valid`；`POST /users/login` 也不加，登录只判断用户名是否存在、密码是否匹配
+- 业务错误（如"用户名已存在"）仍由 Service 直接 `return Result.error(...)`，不抛异常，也就不需要自定义异常类
+- 兜底的 `@ExceptionHandler(Exception.class)` 统一返回"系统异常，请稍后重试"，避免把堆栈细节暴露给前端
 
 ## Redis 缓存说明
 

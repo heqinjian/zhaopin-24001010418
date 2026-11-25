@@ -7,6 +7,7 @@ import com.recruitment.service.UserService;
 import com.recruitment.vo.LoginVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,7 +26,7 @@ public class UserController {
 
     @Operation(summary = "用户注册", description = "新用户注册账号")
     @PostMapping("/register")
-    public Result<User> register(@RequestBody User request) {
+    public Result<User> register(@Valid @RequestBody User request) {
         return userService.register(request);
     }
 
