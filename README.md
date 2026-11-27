@@ -183,6 +183,7 @@ Authorization: Bearer <token>
 - 请求日志拦截器注册在 JWT 拦截器**前面**，先注册的 `preHandle` 先执行，所以没带 Token 被 401 拦下的请求也会留下「开始」「结束」两行
 - 日志里只记 userId、userName、resumeId 这类标识，**不打印简历正文和密码**
 - 日志文件不提交：`.gitignore` 已排除 `*.log` 与 `logs/`
+- Windows 命令行窗口默认代码页是 936（GBK），而 CONSOLE 按 UTF-8 输出，直接 `mvn spring-boot:run` 会让控制台中文显示成乱码（`鑱熺儴…`）。启动前先执行 `chcp 65001` 把窗口切到 UTF-8（或用 IDEA 运行）即可；日志文件本身是 UTF-8，不受影响
 
 ## Redis 缓存说明
 
