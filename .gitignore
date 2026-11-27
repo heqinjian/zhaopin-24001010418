@@ -17,4 +17,5 @@ build/
 # 系统/日志
 .DS_Store
 *.log
+logs/
 .workbuddy-ai/

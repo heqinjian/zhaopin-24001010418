@@ -12,6 +12,7 @@
 - Bean Validation（spring-boot-starter-validation）
 - SpringDoc OpenAPI 2.3.0（接口文档 + Swagger UI）
 - JJWT 0.12.3（JWT 生成与校验）
+- Logback（Spring Boot 内置，`logback-spring.xml` 分级输出到文件）
 - Maven 3.9+
 - Lombok
 
@@ -28,17 +29,18 @@
         │   ├── common/          # 统一响应 Result
         │   ├── config/          # MyBatisPlusConfig、SwaggerConfig、FileUploadConfig、WebMvcConfig、RedisConfig
         │   ├── context/         # UserContext（ThreadLocal 保存当前用户ID）
-        │   ├── interceptor/     # JwtInterceptor（登录拦截）
+        │   ├── interceptor/     # JwtInterceptor（登录拦截）、LoggingInterceptor（请求日志）
         │   ├── controller/      # 控制层（职位/用户/简历/收藏/投递/文件）
         │   ├── exception/       # GlobalExceptionHandler（校验异常统一返回 Result）
         │   ├── service/         # 业务接口
-        │   │   └── impl/        # 业务实现（基于 Mapper + Redis 缓存）
+        │   │   └── impl/        # 业务实现（基于 Mapper + Redis 缓存，含业务日志）
         │   ├── mapper/          # 5 个 Mapper（extends BaseMapper）
         │   ├── model/           # 实体类（@TableName/@TableId/@Schema）
         │   ├── util/            # JwtUtil、RedisUtil
         │   └── vo/              # LoginVO（token + user）
         └── resources/
             ├── application.yml
+            ├── logback-spring.xml  # 日志级别与输出文件配置
             └── db/init.sql      # 建库建表 + 预置数据
 ```
 
@@ -139,6 +141,48 @@ Authorization: Bearer <token>
 - `PUT /resumes/{id}` 是部分更新，**不加** `@Valid`；`POST /users/login` 也不加，登录只判断用户名是否存在、密码是否匹配
 - 业务错误（如"用户名已存在"）仍由 Service 直接 `return Result.error(...)`，不抛异常，也就不需要自定义异常类
 - 兜底的 `@ExceptionHandler(Exception.class)` 统一返回"系统异常，请稍后重试"，避免把堆栈细节暴露给前端
+
+## 日志系统
+
+用 Logback 把日志按级别分流，不再依赖 `System.out.println`（控制台一关就没了）。
+
+### 级别约定
+
+| 级别 | 用在哪 | 本项目例子 |
+| --- | --- | --- |
+| `log.info` | 正常做完的事 | 用户登录成功、简历创建成功、请求开始/结束 |
+| `log.warn` | 请求到了，但业务没通过 | 用户名或密码错误、参数校验失败、创建简历失败 |
+| `log.error` | 系统出错，需要堆栈 | 全局异常处理器兜底的系统异常 |
+
+写法统一用 `{}` 占位符，不做字符串拼接：`log.info("用户登录成功: userId={}, userName={}", id, name)`。
+
+### 输出文件
+
+配置在 `src/main/resources/logback-spring.xml`，写到**运行目录**下的 `logs/` 文件夹（`mvn spring-boot:run` 时即 `recruitment-system/logs/`）：
+
+| 文件 | 内容 |
+| --- | --- |
+| `logs/recruitment-info.log` | 只有 `INFO`（WARN、ERROR 不进来） |
+| `logs/recruitment-error.log` | 只有 `ERROR`，系统异常的堆栈在这里 |
+| `logs/recruitment.log` | `INFO`、`WARN`、`ERROR` 全都有 |
+
+- 按天滚动，文件名带日期，保留 30 天（`maxHistory=30`）
+- `WARN` 只在控制台和 `recruitment.log` 里，不会进 `recruitment-info.log`，也不会进 `recruitment-error.log`
+- MyBatis 的 SQL 仍由 `application.yml` 的 `StdOutImpl` 打到控制台，不写入上述三个文件
+
+### 记录位置
+
+| 位置 | 级别 | 内容 |
+| --- | --- | --- |
+| `LoggingInterceptor`（preHandle） | INFO | `请求开始: GET /users/login` |
+| `LoggingInterceptor`（afterCompletion） | INFO | `请求结束: POST /users/login \| 状态: 200 \| 耗时: 15ms` |
+| `UserServiceImpl.login` | INFO / WARN | 登录请求、登录成功；用户名密码为空、用户名或密码错误 |
+| `ResumeServiceImpl.create` | INFO / WARN | 简历创建成功（`resumeId`、`userId`）；真实姓名为空、用户不存在（带 `userId`） |
+| `GlobalExceptionHandler` | WARN / ERROR | 参数校验失败（拼好的错误文本）；系统异常（第二个参数传异常本身，堆栈进日志） |
+
+- 请求日志拦截器注册在 JWT 拦截器**前面**，先注册的 `preHandle` 先执行，所以没带 Token 被 401 拦下的请求也会留下「开始」「结束」两行
+- 日志里只记 userId、userName、resumeId 这类标识，**不打印简历正文和密码**
+- 日志文件不提交：`.gitignore` 已排除 `*.log` 与 `logs/`
 
 ## Redis 缓存说明
 

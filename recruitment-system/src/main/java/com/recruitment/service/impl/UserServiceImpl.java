@@ -7,11 +7,13 @@ import com.recruitment.model.User;
 import com.recruitment.service.UserService;
 import com.recruitment.util.JwtUtil;
 import com.recruitment.vo.LoginVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 
+@Slf4j
 @Service
 public class UserServiceImpl implements UserService {
 
@@ -50,7 +52,9 @@ public class UserServiceImpl implements UserService {
     @Override
     public Result<LoginVO> login(User request) {
         // 第 1 步：校验参数
+        log.info("用户登录请求: userName={}", request != null ? request.getUserName() : null);
         if (request == null || isBlank(request.getUserName()) || isBlank(request.getPassWord())) {
+            log.warn("登录失败: 用户名或密码为空");
             return Result.error("用户名和密码不能为空");
         }
         // 第 2 步：按用户名查库
@@ -59,11 +63,13 @@ public class UserServiceImpl implements UserService {
         User user = userMapper.selectOne(wrapper);
         // 第 3 步：人不存在或密码不对，统一提示「用户名或密码错误」
         if (user == null || !user.getPassWord().equals(request.getPassWord())) {
+            log.warn("登录失败: 用户名或密码错误, userName={}", request.getUserName());
             return Result.error("用户名或密码错误");
         }
         // 第 4 步：登录成功，生成 token，返回 token 与脱敏用户
         User safeUser = maskPassword(user);
         String token = jwtUtil.generateToken(user.getId());
+        log.info("用户登录成功: userId={}, userName={}", user.getId(), user.getUserName());
         LoginVO loginVO = new LoginVO(token, safeUser);
         return Result.success("登录成功", loginVO);
     }

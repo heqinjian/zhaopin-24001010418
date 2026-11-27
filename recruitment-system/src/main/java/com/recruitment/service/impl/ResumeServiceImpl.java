@@ -8,12 +8,14 @@ import com.recruitment.model.Resume;
 import com.recruitment.model.User;
 import com.recruitment.service.ResumeService;
 import com.recruitment.util.RedisUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 public class ResumeServiceImpl implements ResumeService {
 
@@ -36,10 +38,12 @@ public class ResumeServiceImpl implements ResumeService {
             return Result.error("用户ID不能为空");
         }
         if (isBlank(resume.getRealName())) {
+            log.warn("创建简历失败: 真实姓名为空, userId={}", resume.getUserId());
             return Result.error("真实姓名不能为空");
         }
         // 第 2 步：用户必须存在
         if (userMapper.selectById(resume.getUserId()) == null) {
+            log.warn("创建简历失败: 用户不存在, userId={}", resume.getUserId());
             return Result.error("用户不存在");
         }
         // 第 3 步：补全后端字段——id 由数据库自增，创建/更新时间用服务器时间
@@ -49,6 +53,8 @@ public class ResumeServiceImpl implements ResumeService {
         resume.setUpdateTime(now);
         // 第 4 步：插入数据库
         resumeMapper.insert(resume);
+        // 只记 id 和所属用户，简历正文不进日志
+        log.info("简历创建成功: resumeId={}, userId={}", resume.getId(), resume.getUserId());
         // 第 5 步：插入成功后删除该用户的简历列表缓存（新简历还没有详情缓存）
         redisUtil.delete("resume:list:" + resume.getUserId());
         return Result.success("创建成功", resume);
